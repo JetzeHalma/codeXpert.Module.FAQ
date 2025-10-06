@@ -1,0 +1,105 @@
+@using codeXpert.Module.FAQ.Services
+@using codeXpert.Module.FAQ.Models
+
+@namespace codeXpert.Module.FAQ
+@inherits ModuleBase
+@inject IFAQService FAQService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Index> Localizer
+@inject ISettingService SettingService
+
+@if (_FAQs == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    @if (UserSecurity.IsAuthorized(PageState.User, PermissionNames.Edit, ModuleState.PermissionList) && PageState.EditMode)
+    {
+        <ActionLink Action="Add" Security="SecurityAccessLevel.Edit" Text="Add FAQ" ResourceKey="Add" Class="btn btn-primary m-2" />
+    }
+
+    @if (@_FAQs.Count != 0)
+    {
+        <div class="accordion @_class" id="accordionFAQ">
+
+            @foreach (var childFAQ in _FAQs)
+            {
+                <div class="accordion-item">
+                    <div class="accordion-header" id="heading-@childFAQ.FAQId">
+
+                        <div class="d-flex">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-@childFAQ.FAQId" aria-expanded="false" aria-controls="collapse-@childFAQ.FAQId">
+                                <b>@childFAQ.Question</b>
+                            </button>
+                            @if (UserSecurity.IsAuthorized(PageState.User, PermissionNames.Edit, ModuleState.PermissionList) && PageState.EditMode)
+                            {
+                                <div class="d-flex align-items-end m-3" style="right:100px; z-index:1000;">
+                                    <ActionLink Action="Edit" Parameters="@($"id=" + childFAQ.FAQId.ToString())" ResourceKey="Edit" Class="btn btn-primary btn-sm me-md-2" />
+                                    <ActionDialog Header="Delete FAQ" Message=@Localizer["Delete.Message"] Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger btn-sm" OnClick="@(async () => await Delete(childFAQ))" ResourceKey="Delete" Id="@childFAQ.FAQId.ToString()" />
+                                </div>
+                            }
+                        </div>
+
+                    </div>
+
+                    <div id="collapse-@childFAQ.FAQId" class="accordion-collapse collapse" aria-labelledby="heading-@childFAQ.FAQId" data-bs-parent="#accordionFAQ">
+                        <div class="accordion-body">
+                            @((MarkupString)(Utilities.FormatContent(childFAQ.Answer, PageState.Alias, "render")))
+                        </div>
+                    </div>
+
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <p>@Localizer["Message.DisplayNone"]</p>
+    }
+}
+
+@code {
+
+    public override string RenderMode => RenderModes.Static;
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Resource { ResourceType = ResourceType.Stylesheet, Url = ModulePath() + "Module.css" },
+        new Resource { ResourceType = ResourceType.Script, Url = ModulePath() + "Module.js" }
+    };
+
+    List<FAQ> _FAQs;
+    private string _class;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _FAQs = await FAQService.GetFAQsAsync(ModuleState.ModuleId);
+            Dictionary<string, string> settings = await SettingService.GetModuleSettingsAsync(ModuleState.ModuleId);
+            _class = SettingService.GetSetting(settings, "SettingName", "");
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading FAQ {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Delete(FAQ FAQ)
+    {
+        try
+        {
+            await FAQService.DeleteFAQAsync(FAQ.FAQId, ModuleState.ModuleId);
+            await logger.LogInformation("FAQ Deleted {FAQ}", FAQ);
+            _FAQs = await FAQService.GetFAQsAsync(ModuleState.ModuleId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting FAQ {FAQ} {Error}", FAQ, ex.Message);
+            AddModuleMessage(Localizer["Message.DeleteError"], MessageType.Error);
+        }
+    }
+}

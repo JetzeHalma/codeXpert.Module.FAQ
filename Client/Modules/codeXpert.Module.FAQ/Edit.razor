@@ -1,0 +1,132 @@
+@using Oqtane.Modules.Controls
+@using codeXpert.Module.FAQ.Services
+@using codeXpert.Module.FAQ.Models
+
+@namespace codeXpert.Module.FAQ
+@inherits ModuleBase
+@inject IFAQService FAQService
+@inject NavigationManager NavigationManager
+@inject IStringLocalizer<Edit> Localizer
+
+<form @ref="form" class="@(validated ? " was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="question" HelpText="Enter a question" ResourceKey="Question">Question: </Label>
+            <div class="col-sm-9">
+                <input id="question" class="form-control" @bind="@_question" required />
+            </div>
+            <Label Class="col-sm-3" For="answer" HelpText="Enter a answer" ResourceKey="Answer">Answer: </Label>
+            <div class="col-sm-9">
+                <RichTextEditor Content="@_content" required @ref="@RichTextEditorHtml"></RichTextEditor>
+            </div>
+            <Label Class="col-sm-3" For="order" HelpText="Sort order" ResourceKey="Order">Order: </Label>
+            <div class="col-sm-9">
+                <input id="order" type="number" min="0" step="1" class="form-control" @bind="@_order" maxlength="4" required />
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn btn-success" @onclick="Save">@Localizer["Save"]</button>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl()">@Localizer["Cancel"]</NavLink>
+    <br /><br />
+    @if (PageState.Action == "Edit")
+    {
+        <AuditInfo CreatedBy="@_createdby" CreatedOn="@_createdon" ModifiedBy="@_modifiedby" ModifiedOn="@_modifiedon"></AuditInfo>
+    }
+</form>
+
+@code {
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    public override string Actions => "Add,Edit";
+
+    public override string Title => "Edit FAQ";
+
+    public override List<Resource> Resources => new List<Resource>()
+    {
+        new Resource { ResourceType = ResourceType.Stylesheet, Url = ModulePath() + "Module.css" }
+    };
+
+    private ElementReference form;
+    private bool validated = false;
+
+    private int _id;
+    private string _question;
+    private RichTextEditor RichTextEditorHtml;
+    private string _content = "";
+    private int _order;
+    private string _createdby;
+    private DateTime _createdon;
+    private string _modifiedby;
+    private DateTime _modifiedon;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (PageState.Action == "Edit")
+            {
+                _id = Int32.Parse(PageState.QueryString["id"]);
+                FAQ FAQ = await FAQService.GetFAQAsync(_id, ModuleState.ModuleId);
+                if (FAQ != null)
+                {
+                    _question = FAQ.Question;
+                    _content = Utilities.FormatContent(FAQ.Answer, PageState.Alias, "render");
+                    _order = FAQ.Order;
+                    _createdby = FAQ.CreatedBy;
+                    _createdon = FAQ.CreatedOn;
+                    _modifiedby = FAQ.ModifiedBy;
+                    _modifiedon = FAQ.ModifiedOn;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Loading FAQ {FAQId} {Error}", _id, ex.Message);
+            AddModuleMessage(Localizer["Message.LoadError"], MessageType.Error);
+        }
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            validated = true;
+            var interop = new Oqtane.UI.Interop(JSRuntime);
+            if (await interop.FormValid(form))
+            {
+                _content = await RichTextEditorHtml.GetHtml();
+                _content = Utilities.FormatContent(_content, PageState.Alias, "save");
+
+                if (PageState.Action == "Add")
+                {
+                    FAQ FAQ = new FAQ();
+                    FAQ.ModuleId = ModuleState.ModuleId;
+                    FAQ.Question = _question;
+                    FAQ.Answer = _content;
+                    FAQ.Order = _order;
+                    FAQ = await FAQService.AddFAQAsync(FAQ);
+                    await logger.LogInformation("FAQ Added {FAQ}", FAQ);
+                }
+                else
+                {
+                    FAQ FAQ = await FAQService.GetFAQAsync(_id, ModuleState.ModuleId);
+                    FAQ.Question = _question;
+                    FAQ.Answer = _content;
+                    FAQ.Order = _order;
+                    await FAQService.UpdateFAQAsync(FAQ);
+                    await logger.LogInformation("FAQ Updated {FAQ}", FAQ);
+                }
+                NavigationManager.NavigateTo(NavigateUrl());
+            }
+            else
+            {
+                AddModuleMessage(Localizer["Message.SaveValidation"], MessageType.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Saving FAQ {Error}", ex.Message);
+            AddModuleMessage(Localizer["Message.SaveError"], MessageType.Error);
+        }
+    }
+}
