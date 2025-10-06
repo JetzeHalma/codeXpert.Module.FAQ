@@ -20,10 +20,11 @@ This project is a FAQ module for the Oqtane platform. It provides a flexible and
 
 ### Installation
 
-1. Clone the repository:
-1. 2. Open the solution in Visual Studio.
-3. Restore NuGet packages (__Tools > NuGet Package Manager > Restore NuGet Packages__).
-4. Build the solution (__Build > Build Solution__).
+1. **Clone the repository**  
+2. **Restore dependencies** 
+Open the solution in Visual Studio 2022 and restore NuGet packages.
+3. **Build and run**  
+Build the solution and run the project.
 
 ### Usage
 
